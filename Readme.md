@@ -16,25 +16,26 @@ API calls using the standard examples result in a call to request the current ma
 
 If you have a Node Express server, the Prismic docs [recommend](https://github.com/prismicio/nodejs-sdk/blob/master/app.js) requesting the current 'ref' per-request like this:
 
-    // Middleware to inject prismic context
-    app.use((req, res, next) => {
-      res.locals.ctx = {
-        endpoint: PrismicConfig.apiEndpoint,
-        linkResolver: PrismicConfig.linkResolver,
-      };
-      // add PrismicDOM in locals to access them in templates.
-      res.locals.PrismicDOM = PrismicDOM;
-      Prismic.api(PrismicConfig.apiEndpoint, {
-        accessToken: PrismicConfig.accessToken,
-        req,
-      }).then((api) => {
-        req.prismic = { api };
-        next();
-      }).catch((error) => {
-        next(error.message);
-      });
-    });
-
+```js
+// Middleware to inject prismic context
+app.use((req, res, next) => {
+  res.locals.ctx = {
+    endpoint: PrismicConfig.apiEndpoint,
+    linkResolver: PrismicConfig.linkResolver,
+  };
+  // add PrismicDOM in locals to access them in templates.
+  res.locals.PrismicDOM = PrismicDOM;
+  Prismic.api(PrismicConfig.apiEndpoint, {
+    accessToken: PrismicConfig.accessToken,
+    req,
+  }).then((api) => {
+    req.prismic = { api };
+    next();
+  }).catch((error) => {
+    next(error.message);
+  });
+});
+```
 Moving this outside of the middleware and calling it once reduced the 'chattiness' of my app, but also meant that the API 'ref' would not be updated if I published anything on Prismic.
 
 # Caching calls to Prismic using Redis
@@ -49,80 +50,83 @@ This library wraps the Prismic API and ensures requests are cached in Redis, as 
 
 # Adding the cache to a Next.js / Express app
 
-    const express = require('express')
-    const next = require('next')
-    const compression = require('compression');
-    const app = next({ dev })
-    const RedisCachedPrismicApi = require('./RedisCachedPrismicApi')
+```js
+const express = require('express')
+const next = require('next')
+const compression = require('compression');
+const app = next({ dev })
+const RedisCachedPrismicApi = require('./RedisCachedPrismicApi')
 
-    var redisSettings = {
-      host: 'something.cloud.redislabs.com',
-      port: 16290,
-      options: {
-        password: 'a-secret-password'
-      },
-      debug: false // true logs all cache requests to console.log
+var redisSettings = {
+  host: 'something.cloud.redislabs.com',
+  port: 16290,
+  options: {
+    password: 'a-secret-password'
+  },
+  debug: false // true logs all cache requests to console.log
+}
+
+const prismicApiEndpoint = 'https://your-repo.prismic.io/api/v2'
+
+let cachedApi = new RedisCachedPrismicApi(prismicApiEndpoint, redisSettings)
+
+app.prepare()
+  .then(() => {
+
+    const server = express()
+    if (process.env.NODE_ENV === "production") {
+      server.use(compression())
     }
 
-    const prismicApiEndpoint = 'https://your-repo.prismic.io/api/v2'
+    server.use( (req, res, next) => {
+      const api = cachedApi.api
+      req.prismic = { api }
+      next()
+    })
 
-    let cachedApi = new RedisCachedPrismicApi(prismicApiEndpoint, redisSettings)
+    server.use(express.json())
 
-    app.prepare()
-      .then(() => {
-        
-        const server = express()
-        if (process.env.NODE_ENV === "production") {
-          server.use(compression())
-        }
+    server.post('/prismic', (req, res) => {     
+      cachedApi.refresh()
+      res.end('Cheers Prismic!')
+    })
 
-        server.use( (req, res, next) => {
-          const api = cachedApi.api
-          req.prismic = { api }
-          next()
-        })
+    server.get('*', (req, res) => {
+      return handle(req, res)
+    })
 
-        server.use(express.json())
+    server.listen(port, (err) => {
+      if (err) throw err
+      console.log(`> Ready on http://localhost:${port}`)
+    })
 
-        server.post('/prismic', (req, res) => {     
-          cachedApi.refresh()
-          res.end('Cheers Prismic!')
-        })
-
-        server.get('*', (req, res) => {
-          return handle(req, res)
-        })
-
-        server.listen(port, (err) => {
-          if (err) throw err
-          console.log(`> Ready on http://localhost:${port}`)
-        })
-
-      }
+  }
+```
 
 In your Next.js page you could then do this to query for content:
 
-    class Index extends React.Component {
+```js
+class Index extends React.Component {
 
-      static async getInitialProps({ req, query }) {
-        const page = query.page || 1
-        const prismicApi = (req && req.prismic) ? req.prismic.api : (
-          await Prismic.api(PrismicConfig.apiEndpoint).then((api) => {
-            return api
-          })
-        )
-        const data = await prismicApi.query([ 
-          Predicates.at('document.type', 'article')
-        ],
-        { 
-          pageSize: '18', 
-          page: page,
-          orderings: "[document.first_publication_date desc]"
-        }).catch(err => console.log(err));
+  static async getInitialProps({ req, query }) {
+    const page = query.page || 1
+    const prismicApi = (req && req.prismic) ? req.prismic.api : (
+      await Prismic.api(PrismicConfig.apiEndpoint).then((api) => {
+        return api
+      })
+    )
+    const data = await prismicApi.query([ 
+      Predicates.at('document.type', 'article')
+    ],
+    { 
+      pageSize: '18', 
+      page: page,
+      orderings: "[document.first_publication_date desc]"
+    }).catch(err => console.log(err));
 
-        return { prismic: data, page: page };
-      }
-
+    return { prismic: data, page: page };
+  }
+```
 Then set up a webhook in Prismic's admin area to call your app at yourdomain.com/prismic.
 
 On the server, it will cache API queries and render server-side. On the client side it will use the Prismic API as normal.
