@@ -14,24 +14,24 @@ API calls using the standard examples result in a call to request the current ma
 
 If you have a Node Express server, the Prismic docs [recommend](https://github.com/prismicio/nodejs-sdk/blob/master/app.js) requesting the current 'ref' per-request like this:
 
-`// Middleware to inject prismic context
-app.use((req, res, next) => {
-  res.locals.ctx = {
-    endpoint: PrismicConfig.apiEndpoint,
-    linkResolver: PrismicConfig.linkResolver,
-  };
-  // add PrismicDOM in locals to access them in templates.
-  res.locals.PrismicDOM = PrismicDOM;
-  Prismic.api(PrismicConfig.apiEndpoint, {
-    accessToken: PrismicConfig.accessToken,
-    req,
-  }).then((api) => {
-    req.prismic = { api };
-    next();
-  }).catch((error) => {
-    next(error.message);
-  });
-});`
+    // Middleware to inject prismic context
+    app.use((req, res, next) => {
+      res.locals.ctx = {
+        endpoint: PrismicConfig.apiEndpoint,
+        linkResolver: PrismicConfig.linkResolver,
+      };
+      // add PrismicDOM in locals to access them in templates.
+      res.locals.PrismicDOM = PrismicDOM;
+      Prismic.api(PrismicConfig.apiEndpoint, {
+        accessToken: PrismicConfig.accessToken,
+        req,
+      }).then((api) => {
+        req.prismic = { api };
+        next();
+      }).catch((error) => {
+        next(error.message);
+      });
+    });
 
 Moving this outside of the middleware and calling it once reduced the 'chattiness' of my app, but also meant that the API 'ref' would not be updated if I published anything on Prismic.
 
