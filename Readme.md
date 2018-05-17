@@ -6,6 +6,8 @@ This is a wrapper around the Prismic Javascript API which allows you to:
 * refresh the cached 'ref' when it changes (usually by listening to a webhook)
 * cache Prismic API calls using a Redis LRU cache
 
+Using this approach I moved my Next.js app from an 'F' to an 'A' [rating on webpagetest.org](https://www.webpagetest.org/result/180517_XV_e343a1c19710d5ab370d2442365911f9/) for [the site that I'm building](https://next.makelight.com). 
+
 Prismic-javascript has in-built caching using the DefaultApiCache, which uses an in-memory store for API calls. In lots of situations that works well.
 
 However, for my implementation of Prismic I was finding a few issues:
